@@ -59,9 +59,7 @@ def read(filepath, year):
                             strength.append(int(t[1]))
                         else:                                       # Sanity check
                             print(f"ERROR: invalid date ({data}) at line {line_count} in file {filepath}")
-                    lol = any([x >= 4 for x in lli])
-                    if lol:
-                        print("Loss of lock detected!")
+                    lol = False                                 # TODO: What indicated lol in the end ?
                     res.append({
                         "date": date,
                         "satellite count": sattelite_count,
@@ -80,4 +78,5 @@ def read(filepath, year):
 
 
 if __name__ == "__main__":
-    read("repro.goce2640.13o", 2013)
+    res = read("repro.goce2640.13o", 2013)
+    print(res[0])
