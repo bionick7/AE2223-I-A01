@@ -1,3 +1,5 @@
+import numpy as np
+
 
 def get_header(f):
     """
@@ -21,62 +23,122 @@ def read(filepath, year):
     """
     :param filepath: The filepath of the RINEX file
     :param year: The year the observation was taken on
-    :return: general data as list of dictionary format
-    [{
-        "date": [year, month, day, hour, minute, second],
-        "satellite count": ...,
-        "lol": true/false,
-        "lol indicators": [ ... satellite count ... | 0 <= x <= 7],
-        "signal strengths": [ ... satellite count ... | 0 <= x <= 9],
-        (optional)"event": ...
-    },
-    ... ]
+    :return: connection matrix
+
+    Matrix codes:
+     0: disconnected
+     1: connected, no lol
+     2: lol
+
     """
-    expected_line_start = " " + str(year)[-2:]
+    expected_line_start = " " + str(year)[-2:] + " "
     with open(filepath, "r") as f:
         header = get_header(f)                                      # If needed
         file_line = "."
+        num_observation = 8  # Set to constant for now. actual number in header
+        lines_per_satellite = num_observation // 5 + 1
         line_count = len(header)                                    # For troubleshooting
-        res = []                                                    # The returning array
+        epoch_count = 0                                                 # The returning array
+        connection_matrix = np.zeros([86400, 32], np.byte)
         while file_line:
+            ##if line_count > 100:
+              ##  return {}  # For debugging
             file_line = f.readline()
             line_count += 1
+            """
+            [
+                [0, 0, data, 0, 0],
+                [0, 0, data, 0, 0],
+                ...
+            ]
+            """
             if file_line.startswith(expected_line_start):
                 data = file_line.split()[:-1]                       # Separates line
                 date = [int(x) for x in data[:5]]                   # First 5 integers of the date
                 date.append(float(data[5]))                         # Seconds indicator
                 epoch_flag = int(data[6])                           # Fetches phase bit
+                #print(f"Date: {date}")
+                if epoch_flag != 0:
+                    print(epoch_flag)
                 if epoch_flag < 2:                                  # Case: 'OK'
-                    sattelite_count = int(data[7])                  # Next is the number of availble sattelites
-                    lli = []                                        # Loss of Lock indicators 0-7
-                    strength = []                                   # Strength indicators     0-9
-                    for t in data[8: 8+sattelite_count]:
-                        if len(t) == 1:
-                            lli.append(0)                           # Get if bit set by '(bit & lli != 0)'
-                            strength.append(int(t))
-                        elif len(t) == 2:
-                            lli.append(int(t[0]))
-                            strength.append(int(t[1]))
-                        else:                                       # Sanity check
-                            print(f"ERROR: invalid date ({data}) at line {line_count} in file {filepath}")
-                    lol = False                                 # TODO: What indicated lol in the end ?
-                    res.append({
-                        "date": date,
-                        "satellite count": sattelite_count,
-                        "lol": lol,
-                        "lol indicators": lli,
-                        "signal strengths": strength
-                    })
+                    sattelite_count = int(data[7])                  # Next is the number of availble satellites
+                    satellite_indecies = [int(x) for x in data[8: 8+sattelite_count]]
+
+                    for s in satellite_indecies:
+                        connection_matrix[epoch_count][s-1] = 1
+
+                    lol = []
+                    for i in range(sattelite_count):
+                        text = "".join(f.readline() for i in range(lines_per_satellite))
+                        text.replace("\n", "")  # Get rid of the newlines
+                        data = [float(x) for x in text.split()]
+                        if 0 in data[:-1]:
+                            connection_matrix[epoch_count][satellite_indecies[i] - 1] = 2
+                        else:
+                            connection_matrix[epoch_count][satellite_indecies[i] - 1] = 1
+                            #lol_satellite = satellite_indecies[i]
+                            ##print(lol_satellite)
+                            #lol.append(lol_satellite)
+                    #print(lol)
+
                 elif 2 <= epoch_flag < 6:                       # TODO: What to do exactly if the epoch flag is not 'OK'
                     sattelite_count = int(data[7])
-                    res.append({
-                        "date": date,
-                        "satellite count": sattelite_count,
-                        "event": epoch_flag
-                    })
-    return res
+
+
+            epoch_count += 1
+
+    return connection_matrix
+
+
+def compartementalizer(matrix):
+    """
+    takes matrix ->
+    :return: sattelite track
+    """
+    all_tracks = []
+    for satellite in matrix.transpose():
+        current_track = []
+        connected = False
+        for x in satellite:
+            if x == 0 and connected:
+                # stopped track
+                all_tracks.append(current_track)
+                connected = False
+            elif x != 0 and not connected:
+                # start track
+                current_track = []
+                connected = True
+            if x != 0:
+                current_track.append(x)
+    return all_tracks
+
+
+def check_for_lol(satellite_tracks):
+    for satellite in satellite_tracks: #outer list
+        while satellite[0] == 0:
+            satellite.pop(0)
+        while satellite[-1] == 0:
+            satellite.pop()
+        for data in satellite[1:-1]:
+            if data == 0:
+                print("LoL")
+                #loss of lock
 
 
 if __name__ == "__main__":
-    res = read("repro.goce2640.13o", 2013)
-    print(res[0])
+    res = read("red.goce2460.13o/repro.goce2460.13o", 2013)
+    satellite_tracks = compartementalizer(res)
+    print(satellite_tracks[0])
+    print(len(satellite_tracks))
+    check_for_lol(satellite_tracks)
+
+"""
+time 1:
+21: 0   54: 0   82:  1  03:  1 
+time 2:
+21: 0   54: 1   05:  0  03:  1
+
+[0, 0, 0]
+[0, 0, 0, 0]
+[1, 1]
+"""
