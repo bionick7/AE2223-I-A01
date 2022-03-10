@@ -26,9 +26,9 @@ def read(filepath, year):
     :return: connection matrix
 
     Matrix codes:
-     0: disconnected
-     1: connected, no lol
-     2: lol
+     0: disconnected    -> doesn't show up
+     1: connected, lock
+     2: no lock         -> 0 in the file
 
     """
     expected_line_start = " " + str(year)[-2:] + " "
@@ -83,8 +83,6 @@ def read(filepath, year):
 
                 elif 2 <= epoch_flag < 6:                       # TODO: What to do exactly if the epoch flag is not 'OK'
                     sattelite_count = int(data[7])
-
-
             epoch_count += 1
 
     return connection_matrix
@@ -114,31 +112,29 @@ def compartementalizer(matrix):
 
 
 def check_for_lol(satellite_tracks):
-    for satellite in satellite_tracks: #outer list
-        while satellite[0] == 0:
+    count = 0
+    for satellite in satellite_tracks:  # outer list
+        while satellite != [] and satellite[0] == 2:
             satellite.pop(0)
-        while satellite[-1] == 0:
+        while satellite != [] and satellite[-1] == 2:
             satellite.pop()
+        if 2 in satellite:
+            print(satellite.count(2))
         for data in satellite[1:-1]:
-            if data == 0:
-                print("LoL")
-                #loss of lock
+            if data == 2:
+                count += 1
+    print(count)
 
 
 if __name__ == "__main__":
     res = read("red.goce2460.13o/repro.goce2460.13o", 2013)
     satellite_tracks = compartementalizer(res)
-    print(satellite_tracks[0])
     print(len(satellite_tracks))
     check_for_lol(satellite_tracks)
 
 """
-time 1:
-21: 0   54: 0   82:  1  03:  1 
-time 2:
-21: 0   54: 1   05:  0  03:  1
-
-[0, 0, 0]
-[0, 0, 0, 0]
-[1, 1]
+file -> connection matrix 86400 x 32 0,1,2
+connection matrix -> 502 tracking arrays
 """
+
+# 2:39:57
